@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 體素世界 (完美去邊版)</title>
+    <!-- Tailwind CSS 用於現代化 UI 介面 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js 3D 引擎 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #87CEEB; /* 恢復天空藍底色 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        #webgl-canvas {
+            width: 100vw;
+            height: 100vh; /* 精準填滿 100vh，徹底消除黑邊或藍邊 */
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* --- Minecraft 仿製風樣式 --- */
+        /* --- Minecraft 仿製風樣式 --- -->
+                3px 3px 0 #00aa00,
+                -2px -2px 0 #003300,
+                2px -2px 0 #003300,
+                -2px 2px 0 #003300,
+                4px 4px 8px rgba(0,0,0,0.8);
+        }
+
+        /* 經典黃色標語動態縮放與旋轉 */
+        @keyframes splash-anim {
+            0%, 100% { transform: scale(1) rotate(-15deg); }
+            50% { transform: scale(1.1) rotate(-15deg); }
+        }
+        .splash-text {
+            animation: splash-anim 0.7s infinite alternate ease-in-out;
+            color: #ffff55;
+            text-shadow: 2px 2px 0 #3f3f00, -1px -1px 0 #3f3f00;
+        }
+
+        /* Minecraft 經典按鈕樣式 */
+        .mc-button {
+            background: linear-gradient(180deg, #999999 0%, #737373 50%, #555555 100%);
+            border: 2px solid #000;
+            box-shadow: inset 2px 2px 0px #c6c6c6, inset -2px -2px 0px #373737;
+            color: #e0e0e0;
+            text-shadow: 2px 2px 0 #000;
+            font-family: monospace, sans-serif;
+            font-weight: bold;
+        }
+        .mc-button:hover {
+            background: linear-gradient(180deg, #ababaa 0%, #8c8c8c 50%, #686868 100%);
+            color: #ffffa0;
+        }
+        .mc-button:active {
+            background: linear-gradient(180deg, #444444 0%, #555555 50%, #666666 100%);
+            box-shadow: inset -2px -2px 0px #c6c6c6, inset 2px 2px 0px #373737;
+        }
+
+        /* 螢幕正中央準心 */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 20;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 2px rgba(0,0,0,0.6);
+        }
+        #crosshair::before {
+            top: 7px;
+            left: 0;
+            width: 16px;
+            height: 2px;
+        }
+        #crosshair::after {
+            top: 0;
+            left: 7px;
+            width: 2px;
+            height: 16px;
+        }
+        /* 按鈕觸控點擊特效 */
+        .btn-touch {
+            transition: transform 0.08s ease, filter 0.08s ease;
+        }
+        .btn-touch:active {
+            transform: scale(0.90);
+            filter: brightness(1.25);
+        }
+        /* 長按挖掘進度圈 */
+        #break-progress-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 44px;
+            height: 44px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 25;
+            display: none;
+        }
+        /* 隱藏滾動條 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* --- 經典紅底 Mojang Studios + 苦力怕炸碎再旋轉重組動畫 --- */
+        @keyframes creeper-sneak-in {
+            0% { transform: translateX(220px) scale(0.95); opacity: 0; }
+            12% { opacity: 1; }
+            35% { transform: translateX(10px) scale(1); }
+            42% { transform: translateX(10px) scale(1.08) rotate(-2deg); }
+            48% { transform: translateX(10px) scale(1.18) rotate(3deg); filter: brightness(3) contrast(0.3); }
+            54% { transform: translateX(10px) scale(1.32); filter: brightness(8) contrast(0); opacity: 1; }
+            56% { transform: scale(2.4); opacity: 0; }
+            100% { opacity: 0; }
+        }
+        @keyframes red-screen-shake {
+            0%, 53% { transform: translate(0, 0); }
+            55% { transform: translate(-15px, 12px); }
+            57% { transform: translate(16px, -14px); }
+            59% { transform: translate(-12px, -10px); }
+            61% { transform: translate(8px, 6px); }
+            63%, 100% { transform: translate(0, 0); }
+        }
+        @keyframes blast-flash {
+            0%, 53% { opacity: 0; }
+            55% { opacity: 0.95; }
+            62% { opacity: 0; }
+            84% { opacity: 0; }
+            87% { opacity: 0.6; }
+            94%, 100% { opacity: 0; }
+        }
+        .creeper-meme-anim {
+            animation: creeper-sneak-in 5.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .splash-shake-container {
+            animation: red-screen-shake 5.2s ease-out forwards;
+        }
+        .blast-flash-layer {
+            animation: blast-flash 5.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="relative select-none">
+
+    <!-- 經典紅底 Mojang Studios 苦力怕炸碎再旋轉重組動畫 -->
+    <div id="mojang-splash" class="fixed inset-0 z-[100] bg-[#EF323D] flex flex-col items-center justify-center p-6 overflow-hidden transition-opacity duration-700 select-none" style="perspective: 900px; background-color: #EF323D;">
+        
+        <!-- 爆炸與重組完成時的閃光層 -->
+        <div class="blast-flash-layer fixed inset-0 bg-white pointer-events-none z-40"></div>
+
+        <!-- 震動舞台容器 -->
+        <div class="splash-shake-container relative w-full max-w-md flex flex-col items-center justify-center z-20">
+            
+            <!-- 上方：白色 MOJANG STUDIOS 標誌 (由可炸碎重組的獨立方塊組成) + 苦力怕 -->
+            <div class="relative flex items-center justify-center mb-10 w-full h-24">
+                
+                <!-- 標誌拼圖舞台 -->
+                <div id="mojang-puzzle-stage" class="relative flex items-center gap-3 sm:gap-4 text-white">
+                    <!-- 左側幾何標誌碎片群 -->
+                    <div id="logo-icon-pieces" class="relative w-14 h-14 sm:w-16 sm:h-16">
+                        <div class="mojang-shard absolute top-[18%] left-[12%] w-[42%] h-[28%] bg-white"></div>
+                        <div class="mojang-shard absolute top-[46%] left-[12%] w-[22%] h-[16%] bg-white"></div>
+                        <div class="mojang-shard absolute top-[68%] left-[12%] w-[42%] h-[14%] bg-white"></div>
+                        <div class="mojang-shard absolute top-[18%] left-[62%] w-[26%] h-[64%] bg-white"></div>
+                        <div class="mojang-shard absolute top-[38%] left-[46%] w-[16%] h-[16%] bg-white"></div>
+                    </div>
+
+                    <!-- 右側文字碎片群 (每個字母獨立旋轉飛散再拼回) -->
+                    <div class="flex flex-col leading-none">
+                        <div id="mojang-word-pieces" class="flex text-3xl sm:text-5xl font-black tracking-[0.12em] font-sans">
+                            <span class="mojang-shard inline-block">M</span>
+                            <span class="mojang-shard inline-block">O</span>
+                            <span class="mojang-shard inline-block">J</span>
+                            <span class="mojang-shard inline-block">A</span>
+                            <span class="mojang-shard inline-block">N</span>
+                            <span class="mojang-shard inline-block">G</span>
+                        </div>
+                        <div id="studios-word-pieces" class="flex text-xs sm:text-sm font-bold tracking-[0.38em] opacity-95 mt-1">
+                            <span class="mojang-shard inline-block">S</span>
+                            <span class="mojang-shard inline-block">T</span>
+                            <span class="mojang-shard inline-block">U</span>
+                            <span class="mojang-shard inline-block">D</span>
+                            <span class="mojang-shard inline-block">I</span>
+                            <span class="mojang-shard inline-block">O</span>
+                            <span class="mojang-shard inline-block">S</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 從右側偷偷走進來的苦力怕 -->
+                <div class="creeper-meme-anim absolute right-4 sm:right-8 -bottom-2 z-30">
+                    <svg class="w-16 h-24 sm:w-20 sm:h-28 drop-shadow-2xl" viewBox="0 0 16 24" shape-rendering="crispEdges">
+                        <rect x="4" y="0" width="8" height="8" fill="#43a047" />
+                        <rect x="5" y="1" width="2" height="2" fill="#66bb6a" />
+                        <rect x="9" y="2" width="2" height="1" fill="#2e7d32" />
+                        <rect x="5" y="2" width="2" height="2" fill="#000000" />
+                        <rect x="9" y="2" width="2" height="2" fill="#000000" />
+                        <rect x="7" y="4" width="2" height="1" fill="#000000" />
+                        <rect x="6" y="5" width="4" height="2" fill="#000000" />
+                        <rect x="6" y="7" width="1" height="1" fill="#000000" />
+                        <rect x="9" y="7" width="1" height="1" fill="#000000" />
+                        <rect x="5" y="8" width="6" height="10" fill="#388e3c" />
+                        <rect x="6" y="10" width="2" height="3" fill="#4caf50" />
+                        <rect x="8" y="13" width="2" height="3" fill="#2e7d32" />
+                        <rect x="3" y="18" width="4" height="5" fill="#2e7d32" />
+                        <rect x="9" y="18" width="4" height="5" fill="#2e7d32" />
+                        <rect x="3" y="21" width="4" height="2" fill="#1b5e20" />
+                        <rect x="9" y="21" width="4" height="2" fill="#1b5e20" />
+                    </svg>
+                </div>
+
+            </div>
+
+            <!-- 下方：經典白色外框載入進度條 (分段組成，也會跟著炸開再旋轉拼回) -->
+            <div id="loading-bar-wrapper" class="w-64 sm:w-80 h-4 border-2 border-white p-0.5 bg-[#EF323D] flex gap-0.5">
+                <div class="mojang-shard bar-seg h-full bg-white flex-1 origin-center"></div>
+                <div class="mojang-shard bar-seg h-full bg-white flex-1 origin-center"></div>
+                <div class="mojang-shard bar-seg h-full bg-white flex-1 origin-center"></div>
+                <div class="mojang-shard bar-seg h-full bg-white flex-1 origin-center"></div>
+                <div class="mojang-shard bar-seg h-full bg-white flex-1 origin-center"></div>
+                <div class="mojang-shard bar-seg h-full bg-white flex-1 origin-center"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 主頁 (仿 Minecraft 首頁) 覆蓋層 -->
+    <div id="home-screen" class="absolute inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col items-center justify-between p-6 text-white overflow-y-auto">
+        
+        <!-- 上方：Minecraft LOGO 與黃色標語 -->
+        <div class="mt-12 text-center relative max-w-lg w-full flex flex-col items-center select-none">
+            <!-- 標題名稱 -->
+            <div class="mc-title text-5xl sm:text-7xl font-extrabold uppercase transform -skew-x-6 drop-shadow-2xl">
+                VOXELCRAFT
+            </div>
+            <div class="text-xs text-emerald-300 font-mono tracking-widest mt-1 opacity-90 uppercase">
+                PE POCKET EDITION
+            </div>
+
+            <!-- 黃色標語 (Splash Text) -->
+            <div id="splash-text" class="splash-text absolute -bottom-4 right-4 sm:right-8 text-sm sm:text-base font-bold pointer-events-none whitespace-nowrap">
+                Also try Terraria!
+            </div>
+        </div>
+
+        <!-- 中間：Minecraft 選單按鈕 -->
+        <div class="my-auto w-full max-w-xs flex flex-col gap-3">
+            <button id="btn-start-game" class="mc-button w-full py-3.5 px-6 rounded-none text-base tracking-wide flex items-center justify-center gap-2 transition active:scale-95">
+                新世界 (New Game)
+            </button>
+
+            <button id="btn-load-game" class="mc-button w-full py-2.5 px-6 rounded-none text-sm tracking-wide opacity-90 flex items-center justify-center transition active:scale-95">
+                繼續遊戲 (Load Save)
+            </button>
+
+            <!-- 新增：多人聯機按鈕 -->
+            <button id="btn-multiplayer" class="mc-button w-full py-2.5 px-6 rounded-none text-sm tracking-wide bg-emerald-700/80 flex items-center justify-center gap-2 transition active:scale-95">
+                🌐 多人聯機 (Multiplayer)
+            </button>
+
+            <button id="btn-how-to-play" class="mc-button w-full py-2.5 px-6 rounded-none text-sm tracking-wide opacity-90 flex items-center justify-center transition active:scale-95">
+                操作說明 (Controls)
+            </button>
+
+            <div class="flex gap-2 w-full">
+                <button class="mc-button w-1/2 py-2 px-3 rounded-none text-xs tracking-wide opacity-80 flex items-center justify-center">
+                    設定
+                </button>
+                <button class="mc-button w-1/2 py-2 px-3 rounded-none text-xs tracking-wide opacity-80 flex items-center justify-center">
+                    語言
+                </button>
+            </div>
+        </div>
+
+        <!-- 底部版權宣告 -->
+        <div class="w-full flex justify-between items-end text-[11px] font-mono text-gray-300/80 drop-shadow">
+            <div>Voxelcraft PE v1.2.0</div>
+            <div class="text-right">Copyright Mojang AB / HTML5 Edition</div>
+        </div>
+    </div>
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- 螢幕中心準心 -->
+    <div id="crosshair"></div>
+
+    <!-- 長按破壞進度圈 SVG -->
+    <svg id="break-progress-ring" viewBox="0 0 36 36">
+        <path class="text-white/30" stroke-width="3.5" stroke="currentColor" fill="none"
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        <path id="break-progress-bar" class="text-amber-400" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none"
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+    </svg>
+
+    <!-- 頂部資訊列 (FPS、座標與功能按鈕) -->
+    <div class="absolute top-3 left-3 right-3 flex justify-between items-center z-20 pointer-events-none">
+        <div class="bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-xl text-white text-xs font-mono border border-white/15 shadow-lg flex gap-3">
+            <div>幀率: <span id="fps-counter" class="text-green-400 font-bold">60</span></div>
+            <div>房號: <span id="room-counter" class="text-purple-400 font-bold">default-room</span></div>
+            <div>座標: <span id="pos-counter" class="text-sky-300 font-bold">0, 0, 0</span></div>
+        </div>
+        
+        <div class="flex gap-2 pointer-events-auto">
+            <button id="btn-save" class="bg-emerald-600/80 hover:bg-emerald-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-xl border border-white/20 backdrop-blur-md transition shadow-lg">
+                儲存
+            </button>
+            <button id="btn-load" class="bg-blue-600/80 hover:bg-blue-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-xl border border-white/20 backdrop-blur-md transition shadow-lg">
+                載入
+            </button>
+            <!-- 新增：聯機房號按鈕 -->
+            <button id="btn-room" class="bg-purple-600/80 hover:bg-purple-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-xl border border-white/20 backdrop-blur-md transition shadow-lg">
+                房號
+            </button>
+            <button id="btn-reset" class="bg-black/50 hover:bg-black/70 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-xl border border-white/20 backdrop-blur-md transition shadow-lg">
+                重置
+            </button>
+        </div>
+    </div>
+
+    <!-- 右半螢幕：滑動旋轉視角區域 -->
+    <div id="camera-touch-zone" class="absolute inset-0 z-0"></div>
+
+    <!-- 左下角獨立搖桿控制層 -->
+    <div class="absolute left-4 bottom-4 z-40 pointer-events-auto">
+        <div class="relative w-36 h-36 bg-black/45 backdrop-blur-md rounded-full border-2 border-white/35 flex items-center justify-center touch-none shadow-2xl" id="joystick-container">
+            <div id="joystick-knob" class="w-14 h-14 bg-white/70 rounded-full border border-white shadow-inner transform transition-transform duration-75"></div>
+        </div>
+    </div>
+
+    <!-- 右下角獨立跳躍按鈕 -->
+    <div class="absolute right-5 bottom-5 z-40 pointer-events-auto">
+        <button id="btn-jump" class="btn-touch w-[72px] h-[72px] bg-blue-600/80 active:bg-blue-500 rounded-full text-white font-bold text-base shadow-2xl border-2 border-white/40 flex items-center justify-center backdrop-blur-md">
+            跳躍
+        </button>
+    </div>
+
+    <!-- 底部控制層 (物品列) -->
+    <div class="absolute inset-0 pointer-events-none z-30 flex flex-col justify-end p-3 sm:p-4">
+        <div class="pointer-events-auto mx-auto max-w-full overflow-x-auto no-scrollbar bg-black/70 backdrop-blur-md p-1.5 rounded-2xl border border-white/25 flex gap-2 shadow-2xl mb-1">
+            <button data-type="grass" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-amber-400 flex flex-col items-center justify-center bg-emerald-700 text-white font-bold text-[11px] shadow transition">
+                草地
+            </button>
+            <button data-type="dirt" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-transparent flex flex-col items-center justify-center bg-amber-800 text-white font-bold text-[11px] shadow transition">
+                泥土
+            </button>
+            <button data-type="stone" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-transparent flex flex-col items-center justify-center bg-gray-500 text-white font-bold text-[11px] shadow transition">
+                石頭
+            </button>
+            <button data-type="wood" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-transparent flex flex-col items-center justify-center bg-yellow-900 text-white font-bold text-[11px] shadow transition">
+                原木
+            </button>
+            <button data-type="leaves" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-transparent flex flex-col items-center justify-center bg-green-600 text-white font-bold text-[11px] shadow transition">
+                樹葉
+            </button>
+            <button data-type="brick" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-transparent flex flex-col items-center justify-center bg-red-800 text-white font-bold text-[11px] shadow transition">
+                紅磚
+            </button>
+            <button data-type="glass" class="hotbar-slot w-11 h-11 min-w-[44px] rounded-xl border-2 border-transparent flex flex-col items-center justify-center bg-sky-300/60 text-white font-bold text-[11px] shadow transition">
+                玻璃
+            </button>
+        </div>
+    </div>
+
+    <!-- 遊戲主邏輯腳本 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'voxelcraft-default-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+        let db, auth, userId = 'player_' + Math.floor(Math.random() * 9000 + 1000);
+        let roomCode = 'default-room';
+        let isMultiplayerActive = false;
+        let remotePlayers = new Map();
+        let lastSyncTime = 0;
+
+        if (firebaseConfig) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (token) {
+                    signInWithCustomToken(auth, token).then(() => {
+                        userId = auth.currentUser?.uid || userId;
+                    }).catch(() => signInAnonymously(auth).then(() => {
+                        userId = auth.currentUser?.uid || userId;
+                    }));
+                } else {
+                    signInAnonymously(auth).then(() => {
+                        userId = auth.currentUser?.uid || userId;
+                    });
+                }
+            } catch (e) {
+                console.warn("Firebase Init Error:", e);
+            }
+        }
+
+        const WORLD_SIZE_X = 64;
+        const WORLD_SIZE_Z = 64;
+        const BLOCK_SIZE = 1;
+
+        let scene, camera, renderer;
+        let blocksGroup;
+        const voxelMap = new Map();
+
+        let selectedBlockType = 'grass';
+
+        const player = {
+            position: new THREE.Vector3(32, 16, 32),
+            velocity: new THREE.Vector3(0, 0, 0),
+            rotation: { yaw: 0, pitch: 0 },
+            height: 1.6,
+            radius: 0.3,
+            onGround: false,
+            speed: 5.5,
+            jumpForce: 7.5,
+            gravity: -20.0
+        };
+
+        const joystickInput = { x: 0, forward: 0 };
+        let isJumping = false;
+        let gameStarted = false;
+        let menuAngle = 0;
+
+        const splashes = [
+            "Also try Terraria!",
+            "Made with Three.js!",
+            "HTML5 Edition!",
+            "100% Pure Voxels!",
+            "Mobile Friendly!",
+            "Don't dig straight down!",
+            "Sssssss... BOOM!",
+            "Awesome!"
+        ];
+
+        function createPixelTexture(primaryColor, secondaryColor, pattern = 'noise') {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = primaryColor;
+            ctx.fillRect(0, 0, 16, 16);
+
+            ctx.fillStyle = secondaryColor;
+            for (let x = 0; x < 16; x++) {
+                for (let y = 0; y < 16; y++) {
+                    if (pattern === 'noise' && Math.random() > 0.6) {
+                        ctx.fillRect(x, y, 1, 1);
+                    } else if (pattern === 'brick') {
+                        if (y % 4 === 0 || (x + (y % 8 < 4 ? 0 : 4)) % 8 === 0) {
+                            ctx.fillStyle = secondaryColor;
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    } else if (pattern === 'glass') {
+                        if (x === 0 || x === 15 || y === 0 || y === 15 || (x === y && x < 6)) {
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        const materials = {
+            grass: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('#4a8505', '#386603') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('#4a8505', '#386603') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('#59a80f', '#46870a') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('#795548', '#5d4037') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('#4a8505', '#386603') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('#4a8505', '#386603') })
+            ],
+            dirt: new THREE.MeshLambertMaterial({ map: createPixelTexture('#795548', '#5d4037') }),
+            stone: new THREE.MeshLambertMaterial({ map: createPixelTexture('#808080', '#696969') }),
+            wood: new THREE.MeshLambertMaterial({ map: createPixelTexture('#8B4513', '#5C2E0B') }),
+            leaves: new THREE.MeshLambertMaterial({ map: createPixelTexture('#2d8a4e', '#1e5c34'), transparent: true, opacity: 0.9 }),
+            brick: new THREE.MeshLambertMaterial({ map: createPixelTexture('#b23b23', '#d96b43', 'brick') }),
+            glass: new THREE.MeshLambertMaterial({ map: createPixelTexture('rgba(180, 225, 255, 0.3)', 'rgba(255, 255, 255, 0.6)', 'glass'), transparent: true, opacity: 0.5 })
+        };
+
+        const boxGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        let highlightMesh;
+
+        function init() {
+            setupMojangSplash();
+            setupHomeScreen();
+
+            try {
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x87CEEB);
+                scene.fog = new THREE.FogExp2(0x87CEEB, 0.018);
+
+                camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 70);
+                
+                // 優化：將像素比限制在 1.0 以徹底提升行動裝置與 Koder 瀏覽器的繪製幀率
+                renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), powerPreference: 'high-performance', antialias: false, alpha: false, stencil: false, depth: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(1.0);
+
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+                scene.add(ambientLight);
+
+                const sunLight = new THREE.DirectionalLight(0xffffff, 0.35);
+                sunLight.position.set(30, 50, 20);
+                scene.add(sunLight);
+
+                blocksGroup = new THREE.Group();
+                scene.add(blocksGroup);
+
+                const wireGeo = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+                const wireMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
+                highlightMesh = new THREE.Mesh(wireGeo, wireMat);
+                highlightMesh.visible = false;
+                scene.add(highlightMesh);
+
+                generateWorld();
+                setupMobileControls();
+                setupHotbar();
+                setupMultiplayerUI();
+
+                window.addEventListener('resize', onWindowResize);
+
+                let lastTime = performance.now();
+                let frameCount = 0;
+                let lastFpsUpdate = performance.now();
+
+                function animate(now) {
+                    requestAnimationFrame(animate);
+                    
+                    const delta = Math.min((now - lastTime) / 1000, 0.1);
+                    lastTime = now;
+
+                    if (gameStarted) {
+                        frameCount++;
+                        if (now - lastFpsUpdate >= 500) {
+                            document.getElementById('fps-counter').innerText = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+                            frameCount = 0;
+                            lastFpsUpdate = now;
+                        }
+
+                        updatePlayer(delta);
+                        updateRaycast();
+
+                        if (isMultiplayerActive && db && now - lastSyncTime > 150) {
+                            syncPlayerToServer();
+                            lastSyncTime = now;
+                        }
+                    } else {
+                        menuAngle += delta * 0.12;
+                        const radius = 25;
+                        camera.position.x = 32 + Math.cos(menuAngle) * radius;
+                        camera.position.z = 32 + Math.sin(menuAngle) * radius;
+                        camera.position.y = 18 + Math.sin(menuAngle * 0.5) * 2;
+                        camera.lookAt(32, 10, 32);
+                    }
+
+                    renderer.render(scene, camera);
+                }
+                requestAnimationFrame(animate);
+            } catch (err) {
+                console.error("WebGL Init Error:", err);
+            }
+        }
+
+        function getTerrainHeight(x, z) {
+            const nx = x / 20;
+            const nz = z / 20;
+            const h = Math.sin(nx * 2.5) * Math.cos(nz * 2.5) * 4.0 + Math.sin(nx * 5 + nz * 5) * 1.5;
+            return Math.floor(h) + 7;
+        }
+
+        function generateWorld() {
+            voxelMap.forEach(item => blocksGroup.remove(item.mesh));
+            voxelMap.clear();
+
+            for (let x = 0; x < WORLD_SIZE_X; x++) {
+                for (let z = 0; z < WORLD_SIZE_Z; z++) {
+                    const surfaceY = getTerrainHeight(x, z);
+
+                    for (let y = 0; y <= surfaceY; y++) {
+                        const isInternal = (x > 0 && x < WORLD_SIZE_X - 1 && 
+                                            z > 0 && z < WORLD_SIZE_Z - 1 && 
+                                            y < surfaceY && 
+                                            getTerrainHeight(x+1, z) >= y && 
+                                            getTerrainHeight(x-1, z) >= y && 
+                                            getTerrainHeight(x, z+1) >= y && 
+                                            getTerrainHeight(x, z-1) >= y);
+                        if (isInternal && y < surfaceY - 1) continue;
+
+                        let type = 'stone';
+                        if (y === surfaceY) type = 'grass';
+                        else if (y >= surfaceY - 2) type = 'dirt';
+
+                        createBlock(x, y, z, type);
+                    }
+
+                    if (Math.random() < 0.018 && surfaceY >= 6) {
+                        spawnTree(x, surfaceY + 1, z);
+                    }
+                }
+            }
+        }
+
+        function createBlock(x, y, z, type, syncCloud = false) {
+            const key = `${x},${y},${z}`;
+            if (voxelMap.has(key)) return;
+
+            const mat = materials[type];
+            const mesh = new THREE.Mesh(boxGeometry, mat);
+            mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+            mesh.userData = { x, y, z, type };
+
+            blocksGroup.add(mesh);
+            voxelMap.set(key, { type, mesh });
+
+            if (syncCloud && isMultiplayerActive && db) {
+                syncBlockAction('add', x, y, z, type);
+            }
+        }
+
+        function removeBlock(x, y, z, syncCloud = false) {
+            const key = `${x},${y},${z}`;
+            const item = voxelMap.get(key);
+            if (item) {
+                blocksGroup.remove(item.mesh);
+                voxelMap.delete(key);
+
+                if (syncCloud && isMultiplayerActive && db) {
+                    syncBlockAction('remove', x, y, z, '');
+                }
+            }
+        }
+
+        function spawnTree(x, y, z) {
+            for (let i = 0; i < 4; i++) {
+                createBlock(x, y + i, z, 'wood');
+            }
+            const leafBaseY = y + 2;
+            for (let lx = -1; lx <= 1; lx++) {
+                for (let lz = -1; lz <= 1; lz++) {
+                    for (let ly = 0; ly <= 2; ly++) {
+                        if (lx === 0 && lz === 0 && ly < 2) continue;
+                        createBlock(x + lx, leafBaseY + ly, z + lz, 'leaves');
+                    }
+                }
+            }
+        }
+
+        // --- 多人聯機雲端同步函式 ---
+        async function syncPlayerToServer() {
+            if (!db || !auth.currentUser) return;
+            try {
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', `room_${roomCode}_players`, auth.currentUser.uid);
+                await setDoc(ref, {
+                    x: player.position.x,
+                    y: player.position.y,
+                    z: player.position.z,
+                    yaw: player.rotation.yaw,
+                    pitch: player.rotation.pitch,
+                    updatedAt: Date.now()
+                });
+            } catch (e) {}
+        }
+
+        async function syncBlockAction(action, x, y, z, type) {
+            if (!db) return;
+            try {
+                const blockId = `${x}_${y}_${z}`;
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', `room_${roomCode}_blocks`, blockId);
+                if (action === 'add') {
+                    await setDoc(ref, { x, y, z, type, action: 'add' });
+                } else {
+                    await setDoc(ref, { x, y, z, action: 'remove' });
+                }
+            } catch (e) {}
+        }
+
+        function startMultiplayerSync(code) {
+            roomCode = code;
+            isMultiplayerActive = true;
+            
+            // 即時更新頂部顯示的房號
+            const roomCounterEl = document.getElementById('room-counter');
+            if (roomCounterEl) roomCounterEl.innerText = roomCode;
+
+            showToast(`已連入房號: ${roomCode}`);
+
+            if (!db) {
+                showToast('雲端連線未就緒 (離線模式)');
+                return;
+            }
+
+            const playersRef = collection(db, 'artifacts', appId, 'public', 'data', `room_${roomCode}_players`);
+            onSnapshot(playersRef, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    const data = change.doc.data();
+                    const pId = change.doc.id;
+                    if (auth.currentUser && pId === auth.currentUser.uid) return;
+
+                    if (change.type === 'added' || change.type === 'modified') {
+                        let remoteMesh = remotePlayers.get(pId);
+                        if (!remoteMesh) {
+                            const group = new THREE.Group();
+                            const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.2, 0.3), new THREE.MeshLambertMaterial({ color: 0x2255cc }));
+                            bodyMesh.position.y = 0.6;
+                            group.add(bodyMesh);
+                            const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshLambertMaterial({ color: 0xffcc99 }));
+                            headMesh.position.y = 1.45;
+                            group.add(headMesh);
+
+                            scene.add(group);
+                            remoteMesh = group;
+                            remotePlayers.set(pId, remoteMesh);
+                        }
+                        remoteMesh.position.set(data.x, data.y, data.z);
+                        remoteMesh.rotation.y = data.yaw;
+                    } else if (change.type === 'removed') {
+                        const remoteMesh = remotePlayers.get(pId);
+                        if (remoteMesh) {
+                            scene.remove(remoteMesh);
+                            remotePlayers.delete(pId);
+                        }
+                    }
+                });
+            }, (err) => {});
+
+            const blocksRef = collection(db, 'artifacts', appId, 'public', 'data', `room_${roomCode}_blocks`);
+            onSnapshot(blocksRef, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === 'added' || change.type === 'modified') {
+                        const data = change.doc.data();
+                        if (data.action === 'add') {
+                            createBlock(data.x, data.y, data.z, data.type, false);
+                        } else if (data.action === 'remove') {
+                            removeBlock(data.x, data.y, data.z, false);
+                        }
+                    }
+                });
+            }, (err) => {});
+        }
+
+        function setupMultiplayerUI() {
+            const btnRoom = document.getElementById('btn-room');
+            if (btnRoom) {
+                btnRoom.addEventListener('click', () => {
+                    const code = prompt("輸入聯機房號 (與朋友輸入相同房號即可一起玩):", roomCode);
+                    if (code && code.trim() !== "") {
+                        startMultiplayerSync(code.trim());
+                    }
+                });
+            }
+
+            const btnMultiplayerHome = document.getElementById('btn-multiplayer');
+            if (btnMultiplayerHome) {
+                btnMultiplayerHome.addEventListener('click', () => {
+                    const code = prompt("輸入聯機房號 (與朋友輸入相同房號即可一起玩):", "room_123");
+                    if (code && code.trim() !== "") {
+                        startMultiplayerSync(code.trim());
+                        document.getElementById('btn-start-game').click();
+                    }
+                });
+            }
+        }
+
+        function setupMojangSplash() {
+            const splash = document.getElementById('mojang-splash');
+            const shards = document.querySelectorAll('.mojang-shard');
+            const barWrapper = document.getElementById('loading-bar-wrapper');
+            if (!splash) return;
+
+            const barSegs = document.querySelectorAll('.bar-seg');
+            barSegs.forEach((seg, idx) => {
+                seg.style.opacity = idx < 4 ? '1' : '0';
+                seg.style.transition = 'opacity 0.3s ease';
+            });
+            setTimeout(() => { if (barSegs[4]) barSegs[4].style.opacity = '1'; }, 900);
+
+            function playMemeSequenceSound() {
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtx) return;
+                    const ctx = new AudioCtx();
+                    if (ctx.state === 'suspended') ctx.resume();
+
+                    const hissDur = 1.05;
+                    const bufferSize = ctx.sampleRate * hissDur;
+                    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                    const output = noiseBuffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+                    const whiteNoise = ctx.createBufferSource();
+                    whiteNoise.buffer = noiseBuffer;
+
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(2800, ctx.currentTime);
+                    filter.Q.value = 1.8;
+
+                    const hissGain = ctx.createGain();
+                    hissGain.gain.setValueAtTime(0.01, ctx.currentTime);
+                    hissGain.gain.linearRampToValueAtTime(0.16, ctx.currentTime + 0.25);
+                    hissGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + hissDur);
+
+                    whiteNoise.connect(filter);
+                    filter.connect(hissGain);
+                    hissGain.connect(ctx.destination);
+                    whiteNoise.start();
+
+                    setTimeout(() => {
+                        const boomDur = 0.9;
+                        const boomBuffer = ctx.createBuffer(1, ctx.sampleRate * boomDur, ctx.sampleRate);
+                        const boomData = boomBuffer.getChannelData(0);
+                        for (let i = 0; i < boomData.length; i++) {
+                            boomData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.22));
+                        }
+                        const boomNoise = ctx.createBufferSource();
+                        boomNoise.buffer = boomBuffer;
+
+                        const lowFilter = ctx.createBiquadFilter();
+                        lowFilter.type = 'lowpass';
+                        lowFilter.frequency.setValueAtTime(180, ctx.currentTime);
+
+                        const boomGain = ctx.createGain();
+                        boomGain.gain.setValueAtTime(0.6, ctx.currentTime);
+                        boomGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + boomDur);
+
+                        boomNoise.connect(lowFilter);
+                        lowFilter.connect(boomGain);
+                        boomGain.connect(ctx.destination);
+                        boomNoise.start();
+                    }, 1000);
+
+                    setTimeout(() => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.18);
+                        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.55);
+                    }, 2550);
+                } catch (e) {}
+            }
+
+            setTimeout(() => {
+                playMemeSequenceSound();
+            }, 1850);
+
+            setTimeout(() => {
+                if (barWrapper) {
+                    barWrapper.style.borderColor = 'transparent';
+                    barWrapper.style.backgroundColor = 'transparent';
+                }
+                shards.forEach((el) => {
+                    el.style.opacity = '1';
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 90 + Math.random() * 190;
+                    const tx = Math.cos(angle) * dist;
+                    const ty = Math.sin(angle) * dist - 20;
+                    const rx = (Math.random() - 0.5) * 720;
+                    const ry = (Math.random() - 0.5) * 720;
+                    const rz = (Math.random() - 0.5) * 540;
+                    const scale = 0.75 + Math.random() * 0.5;
+
+                    el.style.transition = 'transform 0.75s cubic-bezier(0.16, 1, 0.3, 1)';
+                    el.style.transform = `translate3d(${tx}px, ${ty}px, 80px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg) scale(${scale})`;
+                });
+            }, 2850);
+
+            setTimeout(() => {
+                shards.forEach((el, idx) => {
+                    const delay = (idx % 6) * 25;
+                    el.style.transition = `transform 0.75s cubic-bezier(0.34, 1.45, 0.64, 1) ${delay}ms`;
+                    el.style.transform = 'translate3d(0px, 0px, 0px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1)';
+                });
+
+                setTimeout(() => {
+                    if (barWrapper) {
+                        barWrapper.style.transition = 'border-color 0.25s ease';
+                        barWrapper.style.borderColor = '#ffffff';
+                    }
+                }, 650);
+            }, 3650);
+
+            setTimeout(() => {
+                splash.style.opacity = '0';
+                splash.style.pointerEvents = 'none';
+                setTimeout(() => {
+                    splash.style.display = 'none';
+                }, 700);
+            }, 5100);
+        }
+
+        function setupHomeScreen() {
+            const homeScreen = document.getElementById('home-screen');
+            const btnStart = document.getElementById('btn-start-game');
+            const btnLoad = document.getElementById('btn-load-game');
+            const splashElem = document.getElementById('splash-text');
+
+            if (splashElem) {
+                splashElem.innerText = splashes[Math.floor(Math.random() * splashes.length)];
+            }
+
+            const startGameAction = (loadSave = false) => {
+                if (loadSave) {
+                    loadWorld();
+                }
+                gameStarted = true;
+                homeScreen.style.opacity = '0';
+                homeScreen.style.pointerEvents = 'none';
+                setTimeout(() => {
+                    homeScreen.style.display = 'none';
+                }, 400);
+            };
+
+            btnStart.addEventListener('click', () => startGameAction(false));
+            btnStart.addEventListener('touchstart', (e) => { e.preventDefault(); startGameAction(false); });
+
+            if (btnLoad) {
+                btnLoad.addEventListener('click', () => startGameAction(true));
+                btnLoad.addEventListener('touchstart', (e) => { e.preventDefault(); startGameAction(true); });
+            }
+
+            const btnHow = document.getElementById('btn-how-to-play');
+            if (btnHow) {
+                btnHow.addEventListener('click', () => {
+                    showToast('點一下螢幕放置方塊｜長按螢幕挖掘破壞｜滑動旋轉視角');
+                });
+            }
+        }
+
+        function saveWorld() {
+            const worldData = [];
+            voxelMap.forEach((item, key) => {
+                worldData.push({
+                    x: item.mesh.userData.x,
+                    y: item.mesh.userData.y,
+                    z: item.mesh.userData.z,
+                    type: item.type
+                });
+            });
+
+            const playerData = {
+                x: player.position.x,
+                y: player.position.y,
+                z: player.position.z,
+                yaw: player.rotation.yaw,
+                pitch: player.rotation.pitch
+            };
+
+            try {
+                localStorage.setItem('voxelcraft_save_world', JSON.stringify(worldData));
+                localStorage.setItem('voxelcraft_save_player', JSON.stringify(playerData));
+                showToast('世界存檔成功！');
+            } catch (e) {
+                showToast('存檔失敗：空間不足');
+            }
+        }
+
+        function loadWorld() {
+            const savedWorld = localStorage.getItem('voxelcraft_save_world');
+            const savedPlayer = localStorage.getItem('voxelcraft_save_player');
+
+            if (!savedWorld) {
+                showToast('沒有找到已儲存的世界');
+                return;
+            }
+
+            try {
+                voxelMap.forEach(item => blocksGroup.remove(item.mesh));
+                voxelMap.clear();
+
+                const worldData = JSON.parse(savedWorld);
+                worldData.forEach(b => {
+                    createBlock(b.x, b.y, b.z, b.type);
+                });
+
+                if (savedPlayer) {
+                    const p = JSON.parse(savedPlayer);
+                    player.position.set(p.x, p.y, p.z);
+                    player.rotation.yaw = p.yaw || 0;
+                    player.rotation.pitch = p.pitch || 0;
+                    player.velocity.set(0, 0, 0);
+                }
+
+                showToast('已成功載入世界！');
+            } catch (e) {
+                showToast('載入存檔失敗');
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed top-16 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-4 py-2 rounded-xl border border-white/20 z-50 transition-opacity duration-300';
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 1800);
+        }
+
+        function updatePlayer(delta) {
+            const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+            euler.x = player.rotation.pitch;
+            euler.y = player.rotation.yaw;
+            camera.quaternion.setFromEuler(euler);
+
+            const forwardVector = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.yaw);
+            const rightVector = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.yaw);
+
+            const moveDir = new THREE.Vector3()
+                .addScaledVector(forwardVector, joystickInput.forward)
+                .addScaledVector(rightVector, joystickInput.x);
+
+            if (moveDir.lengthSq() > 0.0001) {
+                moveDir.normalize();
+            }
+
+            player.velocity.x = moveDir.x * player.speed;
+            player.velocity.z = moveDir.z * player.speed;
+
+            if (isJumping && player.onGround) {
+                player.velocity.y = player.jumpForce;
+                player.onGround = false;
+            }
+            player.velocity.y += player.gravity * delta;
+
+            const oldPos = player.position.clone();
+            
+            player.position.x += player.velocity.x * delta;
+            if (checkPlayerCollision()) {
+                player.position.x = oldPos.x;
+                player.velocity.x = 0;
+            }
+
+            player.position.z += player.velocity.z * delta;
+            if (checkPlayerCollision()) {
+                player.position.z = oldPos.z;
+                player.velocity.z = 0;
+            }
+
+            player.position.y += player.velocity.y * delta;
+            if (checkPlayerCollision()) {
+                if (player.velocity.y < 0) {
+                    player.onGround = true;
+                }
+                player.position.y = oldPos.y;
+                player.velocity.y = 0;
+            } else {
+                player.onGround = false;
+            }
+
+            if (player.position.y < -10) {
+                player.position.set(32, 20, 32);
+                player.velocity.set(0, 0, 0);
+            }
+
+            camera.position.copy(player.position).add(new THREE.Vector3(0, player.height, 0));
+
+            document.getElementById('pos-counter').innerText = 
+                `${Math.floor(player.position.x)}, ${Math.floor(player.position.y)}, ${Math.floor(player.position.z)}`;
+        }
+
+        function checkPlayerCollision() {
+            const minX = Math.floor(player.position.x - player.radius);
+            const maxX = Math.floor(player.position.x + player.radius);
+            const minY = Math.floor(player.position.y);
+            const maxY = Math.floor(player.position.y + player.height);
+            const minZ = Math.floor(player.position.z - player.radius);
+            const maxZ = Math.floor(player.position.z + player.radius);
+
+            for (let x = minX; x <= maxX; x++) {
+                for (let y = minY; y <= maxY; y++) {
+                    for (let z = minZ; z <= maxZ; z++) {
+                        if (voxelMap.has(`${x},${y},${z}`)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        const raycaster = new THREE.Raycaster();
+        let targetBlock = null;
+
+        function updateRaycast() {
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(blocksGroup.children);
+
+            if (intersects.length > 0 && intersects[0].distance <= 6.0) {
+                const hit = intersects[0];
+                const blockMesh = hit.object;
+                targetBlock = {
+                    mesh: blockMesh,
+                    x: blockMesh.userData.x,
+                    y: blockMesh.userData.y,
+                    z: blockMesh.userData.z,
+                    faceNormal: hit.face.normal.clone()
+                };
+
+                highlightMesh.position.copy(blockMesh.position);
+                highlightMesh.visible = true;
+            } else {
+                targetBlock = null;
+                highlightMesh.visible = false;
+            }
+        }
+
+        function setupMobileControls() {
+            const joystickContainer = document.getElementById('joystick-container');
+            const joystickKnob = document.getElementById('joystick-knob');
+            let joystickTouchId = null;
+            let center = { x: 0, y: 0 };
+            const maxRadius = 45;
+
+            joystickContainer.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                joystickTouchId = touch.identifier;
+                const rect = joystickContainer.getBoundingClientRect();
+                center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+                updateJoystick(touch.clientX, touch.clientY);
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (touch.identifier === joystickTouchId) {
+                        updateJoystick(touch.clientX, touch.clientY);
+                        break;
+                    }
+                }
+            });
+
+            const resetJoystick = (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joystickTouchId) {
+                        joystickTouchId = null;
+                        joystickInput.x = 0;
+                        joystickInput.forward = 0;
+                        joystickKnob.style.transform = `translate(0px, 0px)`;
+                        break;
+                    }
+                }
+            };
+
+            window.addEventListener('touchend', resetJoystick);
+            window.addEventListener('touchcancel', resetJoystick);
+
+            function updateJoystick(clientX, clientY) {
+                let dx = clientX - center.x;
+                let dy = clientY - center.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > maxRadius) {
+                    dx = (dx / dist) * maxRadius;
+                    dy = (dy / dist) * maxRadius;
+                }
+
+                joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+                joystickInput.x = dx / maxRadius;
+                joystickInput.forward = -dy / maxRadius;
+            }
+
+            const cameraZone = document.getElementById('camera-touch-zone');
+            const progressRing = document.getElementById('break-progress-ring');
+            const progressBar = document.getElementById('break-progress-bar');
+            let cameraTouchId = null;
+            let lastTouchX = 0;
+            let lastTouchY = 0;
+            let startTouchX = 0;
+            let startTouchY = 0;
+            let touchStartTime = 0;
+            let isDragging = false;
+            let breakTimer = null;
+            let breakAnimFrame = null;
+            let hasBrokenThisTouch = false;
+
+            const LONG_PRESS_DURATION = 450;
+            const DRAG_THRESHOLD = 12;
+
+            function clearBreakProgress() {
+                if (breakTimer) {
+                    clearTimeout(breakTimer);
+                    breakTimer = null;
+                }
+                if (breakAnimFrame) {
+                    cancelAnimationFrame(breakAnimFrame);
+                    breakAnimFrame = null;
+                }
+                progressRing.style.display = 'none';
+                progressBar.setAttribute('stroke-dasharray', '0, 100');
+            }
+
+            function placeBlockAtTarget() {
+                if (!targetBlock) return;
+                const px = targetBlock.x + targetBlock.faceNormal.x;
+                const py = targetBlock.y + targetBlock.faceNormal.y;
+                const pz = targetBlock.z + targetBlock.faceNormal.z;
+
+                const pBoxMin = player.position.clone().sub(new THREE.Vector3(player.radius, 0, player.radius));
+                const pBoxMax = player.position.clone().add(new THREE.Vector3(player.radius, player.height, player.radius));
+
+                if (!(px >= Math.floor(pBoxMin.x) && px <= Math.floor(pBoxMax.x) &&
+                      py >= Math.floor(pBoxMin.y) && py <= Math.floor(pBoxMax.y) &&
+                      pz >= Math.floor(pBoxMin.z) && pz <= Math.floor(pBoxMax.z))) {
+                    createBlock(px, py, pz, selectedBlockType);
+                }
+            }
+
+            cameraZone.addEventListener('touchstart', (e) => {
+                const touch = e.changedTouches[0];
+                if (cameraTouchId === null) {
+                    cameraTouchId = touch.identifier;
+                    lastTouchX = touch.clientX;
+                    lastTouchY = touch.clientY;
+                    startTouchX = touch.clientX;
+                    startTouchY = touch.clientY;
+                    touchStartTime = performance.now();
+                    isDragging = false;
+                    hasBrokenThisTouch = false;
+
+                    if (targetBlock) {
+                        progressRing.style.display = 'block';
+                        const startTime = performance.now();
+
+                        const updateRing = (now) => {
+                            if (isDragging || hasBrokenThisTouch || cameraTouchId === null) return;
+                            const elapsed = now - startTime;
+                            const pct = Math.min((elapsed / LONG_PRESS_DURATION) * 100, 100);
+                            progressBar.setAttribute('stroke-dasharray', `${pct}, 100`);
+
+                            if (elapsed >= LONG_PRESS_DURATION) {
+                                hasBrokenThisTouch = true;
+                                clearBreakProgress();
+                                if (targetBlock) {
+                                    removeBlock(targetBlock.x, targetBlock.y, targetBlock.z);
+                                }
+                            } else {
+                                breakAnimFrame = requestAnimationFrame(updateRing);
+                            }
+                        };
+                        breakAnimFrame = requestAnimationFrame(updateRing);
+                    }
+                }
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (touch.identifier === cameraTouchId) {
+                        const totalMove = Math.hypot(touch.clientX - startTouchX, touch.clientY - startTouchY);
+                        if (totalMove > DRAG_THRESHOLD) {
+                            isDragging = true;
+                            clearBreakProgress();
+                        }
+
+                        const deltaX = touch.clientX - lastTouchX;
+                        const deltaY = touch.clientY - lastTouchY;
+
+                        player.rotation.yaw -= deltaX * 0.005;
+                        player.rotation.pitch -= deltaY * 0.005;
+                        player.rotation.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.rotation.pitch));
+
+                        lastTouchX = touch.clientX;
+                        lastTouchY = touch.clientY;
+                        break;
+                    }
+                }
+            });
+
+            const resetCameraTouch = (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === cameraTouchId) {
+                        const pressDuration = performance.now() - touchStartTime;
+
+                        if (!isDragging && !hasBrokenThisTouch && pressDuration < LONG_PRESS_DURATION) {
+                            placeBlockAtTarget();
+                        }
+
+                        clearBreakProgress();
+                        cameraTouchId = null;
+                        break;
+                    }
+                }
+            };
+            window.addEventListener('touchend', resetCameraTouch);
+            window.addEventListener('touchcancel', resetCameraTouch);
+
+            const btnJump = document.getElementById('btn-jump');
+            btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); isJumping = true; });
+            btnJump.addEventListener('touchend', (e) => { e.preventDefault(); isJumping = false; });
+
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                generateWorld();
+                player.position.set(32, 20, 32);
+                player.velocity.set(0, 0, 0);
+            });
+
+            document.getElementById('btn-save').addEventListener('click', saveWorld);
+            document.getElementById('btn-load').addEventListener('click', loadWorld);
+        }
+
+        function setupHotbar() {
+            const slots = document.querySelectorAll('.hotbar-slot');
+            slots.forEach(slot => {
+                const select = (e) => {
+                    e.stopPropagation();
+                    slots.forEach(s => {
+                        s.classList.remove('border-amber-400');
+                        s.classList.add('border-transparent');
+                    });
+                    slot.classList.remove('border-transparent');
+                    slot.classList.add('border-amber-400');
+                    selectedBlockType = slot.getAttribute('data-type');
+                };
+                slot.addEventListener('touchstart', select);
+                slot.addEventListener('click', select);
+            });
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
